@@ -64,7 +64,7 @@ class ExcelHandler:
             self.sheets[sheet_name] = pd.DataFrame(columns=[
                 'marca', 'titulo', 'url', 'precio', 'precio_anterior',
                 'descuento', 'envio', 'envio_gratis', 'envio_full', 'rating',
-                'total_reviews', 'imagen', 'fecha_actualizacion'
+                'total_reviews', 'imagen', 'opiniones', 'fecha_actualizacion'
             ])
         
         return self.sheets[sheet_name]
@@ -231,6 +231,25 @@ class ExcelHandler:
             ratings = df[df['rating'] != 'N/A']['rating'].astype(float)
             if not ratings.empty:
                 print(f"Rating promedio: {ratings.mean():.1f}")
+        
+        # Mostrar estadísticas de opiniones
+        if 'opiniones' in df.columns:
+            total_opiniones = sum(len(opiniones) for opiniones in df['opiniones'] if opiniones)
+            if total_opiniones > 0:
+                print(f"\n📝 Estadísticas de opiniones:")
+                print(f"Total de opiniones: {total_opiniones}")
+                print(f"Promedio de opiniones por producto: {total_opiniones/len(df):.1f}")
+                
+                # Calcular promedio de calificaciones
+                calificaciones = []
+                for opiniones in df['opiniones']:
+                    if opiniones:
+                        for opinion in opiniones:
+                            if 'calificacion' in opinion:
+                                calificaciones.append(opinion['calificacion'])
+                
+                if calificaciones:
+                    print(f"Calificación promedio: {sum(calificaciones)/len(calificaciones):.1f}")
         
         # Mostrar última actualización
         if 'fecha_actualizacion' in df.columns:

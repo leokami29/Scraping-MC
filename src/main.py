@@ -71,6 +71,39 @@ def get_shipping_filters():
         except ValueError:
             print("❌ Por favor ingrese un número")
 
+def get_reviews_config():
+    """
+    Solicita al usuario la configuración de opiniones
+    
+    Returns:
+        int: Cantidad de opiniones a obtener por producto
+    """
+    print("\n📝 Configuración de opiniones:")
+    print("1. No obtener opiniones")
+    print("2. Obtener 5 opiniones por producto")
+    print("3. Obtener 10 opiniones por producto")
+    print("4. Obtener 20 opiniones por producto")
+    print("5. Obtener todas las opiniones disponibles")
+    
+    while True:
+        try:
+            choice = int(input("\nSeleccione una opción: "))
+            if 1 <= choice <= 5:
+                if choice == 1:
+                    return 0
+                elif choice == 2:
+                    return 5
+                elif choice == 3:
+                    return 10
+                elif choice == 4:
+                    return 20
+                else:  # choice == 5
+                    return 100  # Un número grande para obtener todas las opiniones
+            else:
+                print("❌ Opción inválida")
+        except ValueError:
+            print("❌ Por favor ingrese un número")
+
 def main():
     """
     Función principal que orquesta el proceso de scraping
@@ -96,8 +129,11 @@ def main():
     # Obtener filtros de envío
     shipping_filters = get_shipping_filters()
     
+    # Obtener configuración de opiniones
+    max_reviews = get_reviews_config()
+    
     # Realizar el scraping
-    products = scrape_mercadolibre(query, max_products, shipping_filters)
+    products = scrape_mercadolibre(query, max_products, shipping_filters, max_reviews)
     
     if products:
         # Agregar productos al Excel

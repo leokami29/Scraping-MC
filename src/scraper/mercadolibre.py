@@ -5,8 +5,9 @@ import requests
 from bs4 import BeautifulSoup
 import time
 import re
+from datetime import datetime
 
-def scrape_mercadolibre(query, max_products, shipping_filters=None):
+def scrape_mercadolibre(query, max_products, shipping_filters=None, max_reviews=5):
     """
     Función principal para hacer scraping de MercadoLibre
     
@@ -14,6 +15,7 @@ def scrape_mercadolibre(query, max_products, shipping_filters=None):
         query (str): Término de búsqueda (ej: "laptops")
         max_products (int): Cantidad máxima de productos a obtener
         shipping_filters (dict): Filtros de envío (envio_full, envio_gratis)
+        max_reviews (int): Cantidad máxima de opiniones a obtener por producto
     
     Returns:
         list: Lista de productos
@@ -87,6 +89,10 @@ def scrape_mercadolibre(query, max_products, shipping_filters=None):
                 
                 product = extract_product_info(container)
                 if product:
+                    # Obtener opiniones del producto
+                    if product['url'] != 'N/A':
+                        print(f"\n📝 Obteniendo opiniones para: {product['titulo'][:50]}...")
+                        product['opiniones'] = get_product_reviews(session, product['url'], max_reviews)
                     products.append(product)
                     page_products += 1
             
@@ -106,6 +112,61 @@ def scrape_mercadolibre(query, max_products, shipping_filters=None):
             break
     
     return products
+
+def get_product_reviews(session, product_url, max_reviews):
+    """
+    Obtiene las opiniones de un producto
+    
+    Args:
+        session (requests.Session): Sesión de requests
+        product_url (str): URL del producto
+        max_reviews (int): Cantidad máxima de opiniones a obtener
+    
+    Returns:
+        list: Lista de opiniones
+    """
+    try:
+        # Hacer request a la página del producto
+        response = session.get(product_url)
+        response.raise_for_status()
+        
+        # Parsear HTML
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Buscar contenedor de opiniones
+        reviews = []
+        review_containers = soup.find_all('article', class_='ui-review-capability-comments__comment')
+        
+        for container in review_containers[:max_reviews]:
+            review = {}
+            
+            # Obtener calificación
+            rating_container = container.find('div', class_='ui-review-capability-comments__comment__rating')
+            if rating_container:
+                stars = rating_container.find_all('svg', class_='ui-review-capability-comments__comment__rating__star')
+                review['calificacion'] = len(stars)
+            else:
+                review['calificacion'] = 0
+            
+            # Obtener fecha
+            date = container.find('span', class_='ui-review-capability-comments__comment__date')
+            review['fecha'] = date.get_text().strip() if date else 'N/A'
+            
+            # Obtener contenido
+            content = container.find('p', class_='ui-review-capability-comments__comment__content')
+            review['contenido'] = content.get_text().strip() if content else 'N/A'
+            
+            # Obtener votos útiles
+            likes = container.find('p', class_='ui-review-capability-valorizations__button-like__text')
+            review['votos_utiles'] = likes.get_text().strip() if likes else '0'
+            
+            reviews.append(review)
+        
+        return reviews
+        
+    except Exception as e:
+        print(f"Error obteniendo opiniones: {e}")
+        return []
 
 def extract_product_info(container):
     """Extrae información de un producto"""
