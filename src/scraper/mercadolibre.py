@@ -89,10 +89,14 @@ def scrape_mercadolibre(query, max_products, shipping_filters=None, max_reviews=
                 
                 product = extract_product_info(container)
                 if product:
-                    # Obtener opiniones del producto
+                    # Obtener información detallada del producto
                     if product['url'] != 'N/A':
-                        print(f"\n📝 Obteniendo opiniones para: {product['titulo'][:50]}...")
-                        product['opiniones'] = get_product_reviews(session, product['url'], max_reviews)
+                        print(f"\n📝 Obteniendo detalles para: {product['titulo'][:50]}...")
+                        # Obtener imágenes de alta calidad
+                        product['imagenes'] = get_product_images(session, product['url'])
+                        # Obtener opiniones
+                        if max_reviews > 0:
+                            product['opiniones'] = get_product_reviews(session, product['url'], max_reviews)
                     products.append(product)
                     page_products += 1
             
@@ -112,6 +116,49 @@ def scrape_mercadolibre(query, max_products, shipping_filters=None, max_reviews=
             break
     
     return products
+
+def get_product_images(session, product_url):
+    """
+    Obtiene las imágenes de alta calidad de un producto
+    
+    Args:
+        session (requests.Session): Sesión de requests
+        product_url (str): URL del producto
+    
+    Returns:
+        list: Lista de URLs de imágenes
+    """
+    try:
+        # Hacer request a la página del producto
+        response = session.get(product_url)
+        response.raise_for_status()
+        
+        # Parsear HTML
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Buscar contenedor de imágenes
+        images = []
+        image_containers = soup.find_all('figure', class_='ui-pdp-gallery__figure')
+        
+        for container in image_containers:
+            img = container.find('img')
+            if img:
+                # Intentar obtener la imagen de alta calidad
+                if img.get('data-zoom'):
+                    images.append(img['data-zoom'])
+                elif img.get('srcset'):
+                    # Extraer la URL de alta resolución del srcset
+                    srcset = img['srcset']
+                    high_res_url = srcset.split(' ')[0]
+                    images.append(high_res_url)
+                elif img.get('src'):
+                    images.append(img['src'])
+        
+        return images
+        
+    except Exception as e:
+        print(f"Error obteniendo imágenes: {e}")
+        return []
 
 def get_product_reviews(session, product_url, max_reviews):
     """
@@ -242,7 +289,7 @@ def extract_product_info(container):
             product['rating'] = 'N/A'
             product['total_reviews'] = '0'
         
-        # Imagen
+        # Imagen inicial (thumbnail)
         img = container.find('img', class_='poly-component__picture')
         product['imagen'] = img['src'] if img else 'N/A'
         
