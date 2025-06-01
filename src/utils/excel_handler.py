@@ -5,36 +5,73 @@ import pandas as pd
 import json
 from datetime import datetime
 import os
+import time
 
 class ExcelHandler:
     def __init__(self):
         """
-        Inicializa el manejador de Excel con un único archivo para todas las categorías
+        Inicializa el manejador de Excel con múltiples hojas por categoría
         """
         self.excel_file = "productos_mercadolibre.xlsx"
-        self.df = self._load_or_create_excel()
+        self.sheets = self._load_or_create_excel()
     
     def _load_or_create_excel(self):
         """
         Carga el archivo Excel existente o crea uno nuevo
         
         Returns:
-            pd.DataFrame: DataFrame con los datos
+            dict: Diccionario con los DataFrames de cada hoja
         """
         if os.path.exists(self.excel_file):
-            print(f"📂 Cargando archivo existente: {self.excel_file}")
-            return pd.read_excel(self.excel_file)
+            try:
+                print(f"📂 Cargando archivo existente: {self.excel_file}")
+                return pd.read_excel(self.excel_file, sheet_name=None)
+            except PermissionError:
+                print(f"⚠️  No se puede acceder al archivo {self.excel_file}")
+                print("Por favor, cierre el archivo si está abierto en Excel y presione Enter para continuar...")
+                input()
+                return self._load_or_create_excel()
         else:
             print(f"📝 Creando nuevo archivo: {self.excel_file}")
-            return pd.DataFrame(columns=[
-                'categoria', 'marca', 'titulo', 'url', 'precio', 'precio_anterior',
+            return {}
+    
+    def _get_sheet_name(self, categoria):
+        """
+        Obtiene el nombre de la hoja para una categoría
+        
+        Args:
+            categoria (str): Categoría del producto
+            
+        Returns:
+            str: Nombre de la hoja
+        """
+        return categoria.lower().replace(' ', '_')
+    
+    def _get_or_create_sheet(self, categoria):
+        """
+        Obtiene o crea una hoja para una categoría
+        
+        Args:
+            categoria (str): Categoría del producto
+            
+        Returns:
+            pd.DataFrame: DataFrame de la hoja
+        """
+        sheet_name = self._get_sheet_name(categoria)
+        
+        if sheet_name not in self.sheets:
+            print(f"📝 Creando nueva hoja: {sheet_name}")
+            self.sheets[sheet_name] = pd.DataFrame(columns=[
+                'marca', 'titulo', 'url', 'precio', 'precio_anterior',
                 'descuento', 'envio', 'envio_gratis', 'rating',
                 'total_reviews', 'imagen', 'fecha_actualizacion'
             ])
+        
+        return self.sheets[sheet_name]
     
     def _is_duplicate(self, product, categoria):
         """
-        Verifica si un producto ya existe en el DataFrame para una categoría específica
+        Verifica si un producto ya existe en la hoja de la categoría
         
         Args:
             product (dict): Producto a verificar
@@ -43,15 +80,14 @@ class ExcelHandler:
         Returns:
             bool: True si es duplicado, False si no
         """
-        # Filtrar por categoría
-        df_categoria = self.df[self.df['categoria'] == categoria]
+        df = self._get_or_create_sheet(categoria)
         
         # Buscar por URL (identificador único)
         if 'url' in product and product['url'] != 'N/A':
-            return product['url'] in df_categoria['url'].values
+            return product['url'] in df['url'].values
         # Si no hay URL, buscar por título y marca
-        return (product['titulo'] in df_categoria['titulo'].values and 
-                product['marca'] in df_categoria['marca'].values)
+        return (product['titulo'] in df['titulo'].values and 
+                product['marca'] in df['marca'].values)
     
     def _update_existing_product(self, product, categoria):
         """
@@ -64,39 +100,38 @@ class ExcelHandler:
         Returns:
             bool: True si hubo cambios, False si no
         """
-        # Filtrar por categoría
-        mask = self.df['categoria'] == categoria
+        df = self._get_or_create_sheet(categoria)
         
         if 'url' in product and product['url'] != 'N/A':
-            mask = mask & (self.df['url'] == product['url'])
+            mask = df['url'] == product['url']
         else:
-            mask = mask & (self.df['titulo'] == product['titulo']) & (self.df['marca'] == product['marca'])
+            mask = (df['titulo'] == product['titulo']) & (df['marca'] == product['marca'])
         
         if not mask.any():
             return False
         
-        existing_product = self.df[mask].iloc[0].to_dict()
+        existing_product = df[mask].iloc[0].to_dict()
         changes = []
         
         # Verificar cambios en cada campo
         for key in product:
             if key in existing_product and product[key] != existing_product[key]:
                 changes.append(f"{key}: {existing_product[key]} -> {product[key]}")
-                self.df.loc[mask, key] = product[key]
+                df.loc[mask, key] = product[key]
         
         if changes:
             print(f"🔄 Actualizando producto: {product['titulo']}")
             print("Cambios detectados:")
             for change in changes:
                 print(f"  - {change}")
-            self.df.loc[mask, 'fecha_actualizacion'] = datetime.now()
+            df.loc[mask, 'fecha_actualizacion'] = datetime.now()
             return True
         
         return False
     
     def add_products(self, products, categoria):
         """
-        Agrega nuevos productos al Excel, actualizando los existentes
+        Agrega nuevos productos a la hoja de la categoría
         
         Args:
             products (list): Lista de productos a agregar
@@ -109,10 +144,11 @@ class ExcelHandler:
         actualizados = 0
         duplicados = 0
         
+        df = self._get_or_create_sheet(categoria)
+        
         for product in products:
-            # Agregar fecha de actualización y categoría
+            # Agregar fecha de actualización
             product['fecha_actualizacion'] = datetime.now()
-            product['categoria'] = categoria
             
             if self._is_duplicate(product, categoria):
                 if self._update_existing_product(product, categoria):
@@ -120,91 +156,118 @@ class ExcelHandler:
                 else:
                     duplicados += 1
             else:
-                self.df = pd.concat([self.df, pd.DataFrame([product])], ignore_index=True)
+                df = pd.concat([df, pd.DataFrame([product])], ignore_index=True)
                 nuevos += 1
+        
+        # Actualizar el DataFrame en el diccionario
+        self.sheets[self._get_sheet_name(categoria)] = df
         
         # Guardar cambios
         self.save()
         
         return nuevos, actualizados, duplicados
     
-    def save(self):
-        """Guarda el DataFrame en el archivo Excel"""
-        self.df.to_excel(self.excel_file, index=False)
-        print(f"💾 Guardando cambios en: {self.excel_file}")
-    
-    def show_summary(self, categoria=None):
+    def save(self, max_retries=3):
         """
-        Muestra un resumen de los datos en el Excel
+        Guarda todos los DataFrames en el archivo Excel
         
         Args:
-            categoria (str, optional): Si se especifica, muestra solo el resumen de esa categoría
+            max_retries (int): Número máximo de intentos de guardado
         """
-        if self.df.empty:
-            print("❌ No hay productos en el archivo")
+        for attempt in range(max_retries):
+            try:
+                with pd.ExcelWriter(self.excel_file, engine='openpyxl') as writer:
+                    for sheet_name, df in self.sheets.items():
+                        df.to_excel(writer, sheet_name=sheet_name, index=False)
+                print(f"💾 Guardando cambios en: {self.excel_file}")
+                return
+            except PermissionError:
+                if attempt < max_retries - 1:
+                    print(f"⚠️  No se puede guardar el archivo {self.excel_file}")
+                    print("Por favor, cierre el archivo si está abierto en Excel y presione Enter para continuar...")
+                    input()
+                    time.sleep(1)  # Esperar un momento antes de reintentar
+                else:
+                    print("❌ No se pudo guardar el archivo después de varios intentos")
+                    print("Los cambios se mantendrán en memoria hasta que se pueda guardar")
+                    raise
+    
+    def show_summary(self, categoria):
+        """
+        Muestra un resumen de los datos en la hoja de la categoría
+        
+        Args:
+            categoria (str): Categoría a mostrar
+        """
+        sheet_name = self._get_sheet_name(categoria)
+        if sheet_name not in self.sheets:
+            print(f"❌ No existe la hoja para la categoría: {categoria}")
             return
         
-        # Filtrar por categoría si se especifica
-        df_to_show = self.df[self.df['categoria'] == categoria] if categoria else self.df
-        
-        if df_to_show.empty:
+        df = self.sheets[sheet_name]
+        if df.empty:
             print(f"❌ No hay productos en la categoría: {categoria}")
             return
         
         print("\n📊 Resumen de datos:")
         print("="*50)
+        print(f"Categoría: {categoria}")
+        print(f"Total productos: {len(df)}")
         
-        if categoria:
-            print(f"Categoría: {categoria}")
+        if 'precio' in df.columns:
+            print(f"Precio promedio: ${df['precio'].mean():,.0f}")
+            print(f"Precio mínimo: ${df['precio'].min():,.0f}")
+            print(f"Precio máximo: ${df['precio'].max():,.0f}")
         
-        print(f"Total productos: {len(df_to_show)}")
+        if 'envio_gratis' in df.columns:
+            envio_gratis = df['envio_gratis'].sum()
+            print(f"Productos con envío gratis: {envio_gratis} ({envio_gratis/len(df)*100:.1f}%)")
         
-        if 'precio' in df_to_show.columns:
-            print(f"Precio promedio: ${df_to_show['precio'].mean():,.0f}")
-            print(f"Precio mínimo: ${df_to_show['precio'].min():,.0f}")
-            print(f"Precio máximo: ${df_to_show['precio'].max():,.0f}")
-        
-        if 'envio_gratis' in df_to_show.columns:
-            envio_gratis = df_to_show['envio_gratis'].sum()
-            print(f"Productos con envío gratis: {envio_gratis} ({envio_gratis/len(df_to_show)*100:.1f}%)")
-        
-        if 'rating' in df_to_show.columns:
-            ratings = df_to_show[df_to_show['rating'] != 'N/A']['rating'].astype(float)
+        if 'rating' in df.columns:
+            ratings = df[df['rating'] != 'N/A']['rating'].astype(float)
             if not ratings.empty:
                 print(f"Rating promedio: {ratings.mean():.1f}")
         
         # Mostrar última actualización
-        if 'fecha_actualizacion' in df_to_show.columns:
-            ultima_actualizacion = df_to_show['fecha_actualizacion'].max()
+        if 'fecha_actualizacion' in df.columns:
+            ultima_actualizacion = df['fecha_actualizacion'].max()
             print(f"\nÚltima actualización: {ultima_actualizacion.strftime('%Y-%m-%d %H:%M:%S')}")
         
         print("="*50)
     
     def show_categories_summary(self):
         """Muestra un resumen de todas las categorías en el archivo"""
-        if self.df.empty:
-            print("❌ No hay productos en el archivo")
+        if not self.sheets:
+            print("❌ No hay categorías en el archivo")
             return
         
         print("\n📑 Resumen de categorías:")
         print("="*50)
         
-        # Agrupar por categoría y contar productos
-        categorias = self.df.groupby('categoria').agg({
-            'titulo': 'count',
-            'precio': ['mean', 'min', 'max'],
-            'fecha_actualizacion': 'max'
-        }).round(2)
-        
-        for categoria, row in categorias.iterrows():
+        for sheet_name, df in self.sheets.items():
+            categoria = sheet_name.replace('_', ' ').title()
             print(f"\n📦 {categoria}:")
-            print(f"  Total productos: {row[('titulo', 'count')]}")
-            print(f"  Precio promedio: ${row[('precio', 'mean')]:,.0f}")
-            print(f"  Precio mínimo: ${row[('precio', 'min')]:,.0f}")
-            print(f"  Precio máximo: ${row[('precio', 'max')]:,.0f}")
-            print(f"  Última actualización: {row[('fecha_actualizacion', 'max')].strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"  Total productos: {len(df)}")
+            
+            if 'precio' in df.columns:
+                print(f"  Precio promedio: ${df['precio'].mean():,.0f}")
+                print(f"  Precio mínimo: ${df['precio'].min():,.0f}")
+                print(f"  Precio máximo: ${df['precio'].max():,.0f}")
+            
+            if 'fecha_actualizacion' in df.columns:
+                ultima_actualizacion = df['fecha_actualizacion'].max()
+                print(f"  Última actualización: {ultima_actualizacion.strftime('%Y-%m-%d %H:%M:%S')}")
         
         print("\n" + "="*50)
+    
+    def get_existing_categories(self):
+        """
+        Obtiene la lista de categorías existentes
+        
+        Returns:
+            list: Lista de categorías
+        """
+        return [sheet_name.replace('_', ' ').title() for sheet_name in self.sheets.keys()]
 
 def save_results(products, query, categoria):
     """
