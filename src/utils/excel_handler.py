@@ -61,11 +61,27 @@ class ExcelHandler:
         
         if sheet_name not in self.sheets:
             print(f"📝 Creando nueva hoja: {sheet_name}")
-            self.sheets[sheet_name] = pd.DataFrame(columns=[
-                'marca', 'titulo', 'url', 'precio', 'precio_anterior',
-                'descuento', 'envio', 'envio_gratis', 'envio_full', 'rating',
-                'total_reviews', 'imagen', 'imagenes', 'opiniones', 'fecha_actualizacion'
-            ])
+            # Definir tipos de datos para cada columna
+            dtypes = {
+                'marca': str,
+                'titulo': str,
+                'url': str,
+                'precio': int,
+                'precio_anterior': int,
+                'descuento': str,
+                'envio': str,
+                'envio_gratis': bool,
+                'envio_full': bool,
+                'rating': str,
+                'total_reviews': str,
+                'imagen': str,
+                'imagenes': object,  # Lista de URLs
+                'opiniones': object,  # Lista de diccionarios
+                'fecha_actualizacion': 'datetime64[ns]'
+            }
+            
+            # Crear DataFrame con tipos de datos específicos
+            self.sheets[sheet_name] = pd.DataFrame(columns=list(dtypes.keys())).astype(dtypes)
         
         return self.sheets[sheet_name]
     
@@ -150,13 +166,28 @@ class ExcelHandler:
             # Agregar fecha de actualización
             product['fecha_actualizacion'] = datetime.now()
             
+            # Asegurar que todos los campos requeridos existan
+            for field in df.columns:
+                if field not in product:
+                    if field in ['imagenes', 'opiniones']:
+                        product[field] = []
+                    elif field in ['envio_gratis', 'envio_full']:
+                        product[field] = False
+                    elif field in ['precio', 'precio_anterior']:
+                        product[field] = 0
+                    else:
+                        product[field] = 'N/A'
+            
             if self._is_duplicate(product, categoria):
                 if self._update_existing_product(product, categoria):
                     actualizados += 1
                 else:
                     duplicados += 1
             else:
-                df = pd.concat([df, pd.DataFrame([product])], ignore_index=True)
+                # Convertir el producto a DataFrame con los tipos de datos correctos
+                new_df = pd.DataFrame([product])
+                new_df = new_df.astype(df.dtypes)
+                df = pd.concat([df, new_df], ignore_index=True)
                 nuevos += 1
         
         # Actualizar el DataFrame en el diccionario
@@ -234,7 +265,7 @@ class ExcelHandler:
         
         # Mostrar estadísticas de imágenes
         if 'imagenes' in df.columns:
-            total_imagenes = sum(len(imagenes) for imagenes in df['imagenes'] if imagenes)
+            total_imagenes = sum(len(imagenes) for imagenes in df['imagenes'] if isinstance(imagenes, list))
             if total_imagenes > 0:
                 print(f"\n🖼️  Estadísticas de imágenes:")
                 print(f"Total de imágenes: {total_imagenes}")
@@ -242,7 +273,7 @@ class ExcelHandler:
         
         # Mostrar estadísticas de opiniones
         if 'opiniones' in df.columns:
-            total_opiniones = sum(len(opiniones) for opiniones in df['opiniones'] if opiniones)
+            total_opiniones = sum(len(opiniones) for opiniones in df['opiniones'] if isinstance(opiniones, list))
             if total_opiniones > 0:
                 print(f"\n📝 Estadísticas de opiniones:")
                 print(f"Total de opiniones: {total_opiniones}")
@@ -251,9 +282,9 @@ class ExcelHandler:
                 # Calcular promedio de calificaciones
                 calificaciones = []
                 for opiniones in df['opiniones']:
-                    if opiniones:
+                    if isinstance(opiniones, list):
                         for opinion in opiniones:
-                            if 'calificacion' in opinion:
+                            if isinstance(opinion, dict) and 'calificacion' in opinion:
                                 calificaciones.append(opinion['calificacion'])
                 
                 if calificaciones:

@@ -7,7 +7,7 @@ import time
 import re
 from datetime import datetime
 
-def scrape_mercadolibre(query, max_products, shipping_filters=None, max_reviews=5):
+def scrape_mercadolibre(query, max_products, shipping_filters=None, max_reviews=5, only_branded=False):
     """
     Función principal para hacer scraping de MercadoLibre
     
@@ -16,6 +16,7 @@ def scrape_mercadolibre(query, max_products, shipping_filters=None, max_reviews=
         max_products (int): Cantidad máxima de productos a obtener
         shipping_filters (dict): Filtros de envío (envio_full, envio_gratis)
         max_reviews (int): Cantidad máxima de opiniones a obtener por producto
+        only_branded (bool): Si es True, solo obtiene productos con marca
     
     Returns:
         list: Lista de productos
@@ -46,6 +47,8 @@ def scrape_mercadolibre(query, max_products, shipping_filters=None, max_reviews=
             print("  - Envío Full")
         if shipping_filters.get('envio_gratis'):
             print("  - Envío Gratis")
+    if only_branded:
+        print("🏷️  Solo productos con marca")
     print("="*50)
     
     while len(products) < max_products:
@@ -89,6 +92,10 @@ def scrape_mercadolibre(query, max_products, shipping_filters=None, max_reviews=
                 
                 product = extract_product_info(container)
                 if product:
+                    # Filtrar productos sin marca si se requiere
+                    if only_branded and product['marca'] == 'N/A':
+                        continue
+                        
                     # Obtener información detallada del producto
                     if product['url'] != 'N/A':
                         print(f"\n📝 Obteniendo detalles para: {product['titulo'][:50]}...")

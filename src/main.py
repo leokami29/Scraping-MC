@@ -104,6 +104,26 @@ def get_reviews_config():
         except ValueError:
             print("❌ Por favor ingrese un número")
 
+def get_brand_filter():
+    """
+    Pregunta al usuario si desea filtrar solo productos con marca
+    
+    Returns:
+        bool: True si solo se quieren productos con marca, False si se quieren todos
+    """
+    print("\n🏷️  Filtro de marca:")
+    print("1. Todos los productos")
+    print("2. Solo productos con marca")
+    
+    while True:
+        try:
+            opcion = int(input("\nSeleccione una opción (1-2): "))
+            if opcion in [1, 2]:
+                return opcion == 2
+            print("❌ Opción inválida. Por favor seleccione 1 o 2.")
+        except ValueError:
+            print("❌ Por favor ingrese un número válido.")
+
 def main():
     """
     Función principal que orquesta el proceso de scraping
@@ -132,8 +152,17 @@ def main():
     # Obtener configuración de opiniones
     max_reviews = get_reviews_config()
     
+    # Obtener filtro de marca
+    only_branded = get_brand_filter()
+    
     # Realizar el scraping
-    products = scrape_mercadolibre(query, max_products, shipping_filters, max_reviews)
+    products = scrape_mercadolibre(
+        query=query,
+        max_products=max_products,
+        shipping_filters=shipping_filters,
+        max_reviews=max_reviews,
+        only_branded=only_branded
+    )
     
     if products:
         # Agregar productos al Excel
