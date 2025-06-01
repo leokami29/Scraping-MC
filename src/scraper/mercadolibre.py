@@ -6,13 +6,14 @@ from bs4 import BeautifulSoup
 import time
 import re
 
-def scrape_mercadolibre(query, max_products):
+def scrape_mercadolibre(query, max_products, shipping_filters=None):
     """
     Función principal para hacer scraping de MercadoLibre
     
     Args:
         query (str): Término de búsqueda (ej: "laptops")
         max_products (int): Cantidad máxima de productos a obtener
+        shipping_filters (dict): Filtros de envío (envio_full, envio_gratis)
     
     Returns:
         list: Lista de productos
@@ -37,6 +38,12 @@ def scrape_mercadolibre(query, max_products):
     
     print(f"🔍 Buscando: {query}")
     print(f"🎯 Objetivo: {max_products} productos")
+    if shipping_filters:
+        print("🚚 Filtros de envío:")
+        if shipping_filters.get('envio_full'):
+            print("  - Envío Full")
+        if shipping_filters.get('envio_gratis'):
+            print("  - Envío Gratis")
     print("="*50)
     
     while len(products) < max_products:
@@ -44,6 +51,16 @@ def scrape_mercadolibre(query, max_products):
         
         # Construir la URL base
         url = f"{base_url}/{query.replace(' ', '-')}"
+        
+        # Agregar filtros de envío a la URL
+        if shipping_filters:
+            filters = []
+            if shipping_filters.get('envio_full'):
+                filters.append('shipping_highlighted_fulfillment')
+            if shipping_filters.get('envio_gratis'):
+                filters.append('shipping_cost_highlighted_free')
+            if filters:
+                url += f"_Shipping_{'-'.join(filters)}"
         
         if page > 1:
             url += f"_Desde_{(page-1)*items_per_page + 1}"
@@ -133,10 +150,20 @@ def extract_product_info(container):
         if shipping:
             shipping_text = shipping.get_text().strip()
             product['envio'] = shipping_text
+            
+            # Detectar envío gratis
             product['envio_gratis'] = 'gratis' in shipping_text.lower()
+            
+            # Detectar envío full
+            product['envio_full'] = False
+            full_shipping = container.find('li', class_='ui-search-filter-highlighted-shipping_highlighted_fulfillment')
+            if full_shipping:
+                product['envio_full'] = True
+                product['envio'] = 'Envío Full'
         else:
             product['envio'] = 'N/A'
             product['envio_gratis'] = False
+            product['envio_full'] = False
         
         # Rating
         reviews = container.find('div', class_='poly-component__reviews')

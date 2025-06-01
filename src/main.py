@@ -41,6 +41,36 @@ def select_category(excel_handler):
             return new_category
         print("❌ El nombre de la categoría no puede estar vacío")
 
+def get_shipping_filters():
+    """
+    Solicita al usuario los filtros de envío
+    
+    Returns:
+        dict: Filtros de envío seleccionados
+    """
+    print("\n🚚 Filtros de envío:")
+    print("1. Sin filtros")
+    print("2. Solo envío Full")
+    print("3. Solo envío gratis")
+    print("4. Envío Full y gratis")
+    
+    while True:
+        try:
+            choice = int(input("\nSeleccione una opción: "))
+            if 1 <= choice <= 4:
+                if choice == 1:
+                    return {}
+                elif choice == 2:
+                    return {'envio_full': True}
+                elif choice == 3:
+                    return {'envio_gratis': True}
+                else:  # choice == 4
+                    return {'envio_full': True, 'envio_gratis': True}
+            else:
+                print("❌ Opción inválida")
+        except ValueError:
+            print("❌ Por favor ingrese un número")
+
 def main():
     """
     Función principal que orquesta el proceso de scraping
@@ -63,8 +93,11 @@ def main():
     precio_max = input("Precio máximo (opcional, dejar vacío si no aplica): ")
     max_products = int(input("Cantidad máxima de productos a obtener: "))
     
+    # Obtener filtros de envío
+    shipping_filters = get_shipping_filters()
+    
     # Realizar el scraping
-    products = scrape_mercadolibre(query, max_products)
+    products = scrape_mercadolibre(query, max_products, shipping_filters)
     
     if products:
         # Agregar productos al Excel

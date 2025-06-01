@@ -63,7 +63,7 @@ class ExcelHandler:
             print(f"📝 Creando nueva hoja: {sheet_name}")
             self.sheets[sheet_name] = pd.DataFrame(columns=[
                 'marca', 'titulo', 'url', 'precio', 'precio_anterior',
-                'descuento', 'envio', 'envio_gratis', 'rating',
+                'descuento', 'envio', 'envio_gratis', 'envio_full', 'rating',
                 'total_reviews', 'imagen', 'fecha_actualizacion'
             ])
         
@@ -222,6 +222,10 @@ class ExcelHandler:
         if 'envio_gratis' in df.columns:
             envio_gratis = df['envio_gratis'].sum()
             print(f"Productos con envío gratis: {envio_gratis} ({envio_gratis/len(df)*100:.1f}%)")
+        
+        if 'envio_full' in df.columns:
+            envio_full = df['envio_full'].sum()
+            print(f"Productos con envío Full: {envio_full} ({envio_full/len(df)*100:.1f}%)")
         
         if 'rating' in df.columns:
             ratings = df[df['rating'] != 'N/A']['rating'].astype(float)
